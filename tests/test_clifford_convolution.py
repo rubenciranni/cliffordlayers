@@ -27,6 +27,18 @@ def test_complex_convolution():
     output_c = F.conv1d(input_c, w_c, b_c)
     torch.testing.assert_close(output_clifford_conv, torch.view_as_real(output_c))
 
+def test_complex_grouped_convolution():
+    """Test Clifford1d grouped convolution module against complex convolution module using g = [-1]."""
+    in_channels = 8
+    out_channels = 16
+    x = torch.randn(1, in_channels, 128, 2)
+    clifford_conv = CliffordConv1d(g=[-1], in_channels=in_channels, out_channels=out_channels, kernel_size=3, groups=4)
+    output_clifford_conv = clifford_conv(x)
+    w_c = torch.view_as_complex(torch.stack((clifford_conv.weight[0], clifford_conv.weight[1]), -1))
+    b_c = torch.view_as_complex(clifford_conv.bias.permute(1, 0).contiguous())
+    input_c = torch.view_as_complex(x)
+    output_c = F.conv1d(input_c, w_c, b_c, groups=4)
+    torch.testing.assert_close(output_clifford_conv, torch.view_as_real(output_c))
 
 def test_Clifford1d_conv_shapes():
     """Test shapes of Clifford1d convolution module."""

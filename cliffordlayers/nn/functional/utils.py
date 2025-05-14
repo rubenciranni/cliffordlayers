@@ -32,15 +32,35 @@ def clifford_convnd(
     Returns:
         torch.Tensor: Convolved output tensor.
     """
-    # Reshape x such that the convolution function can be applied.
+    # Reshape x such that the convolution function with grouping can be applied.
     B, *_ = x.shape
+    groups = kwargs['groups']
     B_dim, C_dim, *D_dims, I_dim = range(len(x.shape))
     x = x.permute(B_dim, -1, C_dim, *D_dims)
+    B_dim, I_dim, C_dim, *D_dims = range(len(x.shape))
+    x = x.chunk(groups, C_dim)
+    x = torch.cat(x, dim=I_dim)
     x = x.reshape(B, -1, *x.shape[3:])
+    # Reshape weight and bias such that the convolution function with grouping can be applied.
+    ICO, CI, *K = weight.shape
+    weight = weight.reshape(output_blades, ICO // output_blades, *weight.shape[1:])
+    I_dim, CO_dim, *_ = range(len(weight.shape))
+    weight = weight.chunk(groups, CO_dim)
+    weight = torch.cat(weight, dim=I_dim)
+    weight = weight.reshape(-1, CI, *K)
+    bias = bias.reshape(output_blades, ICO // output_blades)
+    bias = bias.chunk(groups, CO_dim)
+    bias = torch.cat(bias, dim=I_dim)
+    bias = bias.reshape(-1)
     # Apply convolution function
     output = conv_fn(x, weight, bias=bias, **kwargs)
     # Reshape back.
-    output = output.view(B, output_blades, -1, *output.shape[2:])
+    output = output.view(B, groups, -1, *output.shape[2:])
+    B_dim, G_dim, C_dim, *D_dims = range(len(output.shape))
+    output = output.chunk(output_blades, dim=C_dim)
+    output = torch.cat(output, dim=G_dim)
+    B, IG, CO_G, *D = output.shape
+    output = output.reshape(B, IG // groups, CO_G * groups, *D)
     B_dim, I_dim, C_dim, *D_dims = range(len(output.shape))
     output = output.permute(B_dim, C_dim, *D_dims, I_dim)
     return output
